@@ -1184,4 +1184,87 @@ class Leads_model extends App_Model
 
         return $kanBan->get();
     }
+
+    /**
+     * Add lead from Meta API integration
+     * Specialized method for Meta-imported leads
+     * @param array $data Lead data from Meta API
+     * @return mixed false || leadid
+     */
+    public function add_from_meta($data)
+    {
+        // Store external_id and imported_from separately
+        $external_id = isset($data['external_id']) ? $data['external_id'] : '';
+        $imported_from = isset($data['imported_from']) ? $data['imported_from'] : 'meta_api';
+        
+        // Remove from data array temporarily to use standard add method
+        unset($data['external_id']);
+        unset($data['imported_from']);
+        
+        // Ensure description is set
+        if (!isset($data['description']) || empty($data['description'])) {
+            $data['description'] = 'Lead imported from Meta Lead Ads';
+        }
+        
+        // Use standard insert instead of add() to avoid staff_user_id requirements
+        $data['dateadded'] = isset($data['dateadded']) ? $data['dateadded'] : date('Y-m-d H:i:s');
+        $data['addedfrom'] = isset($data['addedfrom']) ? $data['addedfrom'] : 0; // System added
+        
+        if (!isset($data['country']) || $data['country'] == '') {
+            $data['country'] = 0;
+        }
+        
+        if (!isset($data['is_public'])) {
+            $data['is_public'] = 0;
+        }
+        
+        $data = hooks()->apply_filters('before_lead_added_from_meta', $data);
+        
+        // Add external tracking fields
+        $data['external_id'] = $external_id;
+        $data['imported_from'] = $imported_from;
+        
+        $this->db->insert(db_prefix() . 'leads', $data);
+        $insert_id = $this->db->insert_id();
+        
+        if ($insert_id) {
+            log_activity('New Lead Added from Meta API [ID: ' . $insert_id . ', External ID: ' . $external_id . ']');
+            
+            hooks()->do_action('lead_created_from_meta', $insert_id);
+            
+            return $insert_id;
+        }
+        
+        return false;
+    }
+
+    /**
+     * Get lead by external ID (from Meta API)
+     * @param string $external_id External lead ID from Meta
+     * @return object|null Lead object or null
+     */
+    public function get_lead_by_external_id($external_id)
+    {
+        if (empty($external_id)) {
+            return null;
+        }
+        
+        $this->db->where('external_id', $external_id);
+        $this->db->limit(1);
+        
+        return $this->db->get(db_prefix() . 'leads')->row();
+    }
+
+    /**
+     * Log Meta sync activity (used by Meta_lead_api library)
+     * This is a stub to avoid errors - actual logging is done in the library
+     * @param array $sync_data Sync data
+     * @return bool
+     */
+    public function log_sync_activity($sync_data)
+    {
+        // This method is kept for compatibility
+        // Actual sync logging is done in Meta_lead_api library
+        return true;
+    }
 }

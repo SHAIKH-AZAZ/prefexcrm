@@ -1359,4 +1359,90 @@ class Leads extends AdminController
         $this->zip->download('files.zip');
         $this->zip->clear_data();
     }
+
+    /**
+     * Sync leads from Meta API
+     * AJAX endpoint for manual lead synchronization
+     */
+    public function sync_meta_leads()
+    {
+        if (!is_staff_member()) {
+            ajax_access_denied();
+        }
+
+        // Check if Meta API is enabled and configured
+        $meta_enabled = get_option('meta_api_enabled');
+        $page_id = get_option('meta_api_page_id');
+        $access_token = get_option('meta_api_access_token');
+
+        if (!$meta_enabled || empty($page_id) || empty($access_token)) {
+            echo json_encode([
+                'success' => false,
+                'message' => _l('meta_api_not_configured')
+            ]);
+            return;
+        }
+
+        // Load Meta API library
+        $this->load->library('Meta_lead_api');
+
+        // Trigger sync
+        $result = $this->meta_lead_api->sync_leads(get_staff_user_id(), 'manual');
+
+        echo json_encode($result);
+    }
+
+    /**
+     * Validate Meta API connection
+     * AJAX endpoint for testing API credentials
+     */
+    public function validate_meta_connection()
+    {
+        if (!is_admin()) {
+            ajax_access_denied();
+        }
+
+        $page_id = $this->input->post('page_id');
+        $access_token = $this->input->post('access_token');
+
+        if (empty($page_id) || empty($access_token)) {
+            echo json_encode([
+                'success' => false,
+                'message' => 'Page ID and Access Token are required'
+            ]);
+            return;
+        }
+
+        // Load Meta API library
+        $this->load->library('Meta_lead_api');
+
+        // Validate connection
+        $result = $this->meta_lead_api->validate_connection($page_id, $access_token);
+
+        echo json_encode($result);
+    }
+
+    /**
+     * Get Meta API sync status
+     * AJAX endpoint for checking last sync time and stats
+     */
+    public function get_meta_sync_status()
+    {
+        if (!is_staff_member()) {
+            ajax_access_denied();
+        }
+
+        $last_sync = get_option('meta_api_last_sync');
+        
+        // Get last sync log entry
+        $this->db->order_by('sync_date', 'DESC');
+        $this->db->limit(1);
+        $last_log = $this->db->get(db_prefix() . 'meta_sync_log')->row();
+
+        echo json_encode([
+            'success' => true,
+            'last_sync' => $last_sync,
+            'last_log' => $last_log
+        ]);
+    }
 }
